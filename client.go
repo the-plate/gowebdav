@@ -6,10 +6,12 @@ import (
 	"encoding/xml"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
 	"net/url"
 	"os"
 	pathpkg "path"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -451,6 +453,7 @@ func (c *Client) WriteStream(path string, stream io.Reader, _ os.FileMode) (err 
 	}
 }
 
+// WriteWrCls uploads files via io.Pipe returning the WriteCloser
 func (c *Client) WriteWrCls(_ context.Context, path string, _ os.FileMode) (writer io.WriteCloser, err error) {
 	pr, pw := io.Pipe()
 	done := make(chan error, 1)
@@ -459,6 +462,7 @@ func (c *Client) WriteWrCls(_ context.Context, path string, _ os.FileMode) (writ
 		defer pr.Close()
 
 		_, err := c.put(path, pr)
+		// TODO: Handle return codes... in case of some 4xx, 5xx perform appropriate action
 		if err != nil {
 			done <- err
 			return
@@ -468,4 +472,79 @@ func (c *Client) WriteWrCls(_ context.Context, path string, _ os.FileMode) (writ
 
 	tmpPw := FileWriter{pw, done}
 	return &tmpPw, nil
+}
+
+// ReadAll reads all the subdirectories with it's content. Files are only returned.
+func (c *Client) ReadAll(path string, filesOnly bool, doRec bool) ([]os.FileInfo, error) {
+	path = FixSlashes(path)
+	l := make([]os.FileInfo, 0)
+
+	err := c.WalkDav(path, func(p string, fi os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		// specify whether files are returned only or whether folders are returned as well
+		if filesOnly {
+			if !fi.IsDir() {
+				l = append(l, fi)
+			}
+		} else {
+			l = append(l, fi)
+		}
+
+		if !doRec && fi.IsDir() && path != p {
+			return filepath.SkipDir
+		}
+		return nil
+	})
+
+	return l, err
+}
+
+// WalkDav walks the file tree from the root, calling fn for each file or dir
+func (c *Client) WalkDav(root string, fn filepath.WalkFunc) error {
+	info, err := c.Stat(root)
+	if err != nil {
+		err = fn(root, nil, err)
+	} else {
+		err = c.walkDav(root, info, fn)
+	}
+	if err == filepath.SkipDir {
+		return nil
+	}
+	return err
+}
+
+// walkDav recursively descends path
+func (c *Client) walkDav(path string, info fs.FileInfo, walkFn filepath.WalkFunc) error {
+	if !info.IsDir() {
+		return walkFn(path, info, nil)
+	}
+
+	names, err := c.ReadDir(path)
+	err1 := walkFn(path, info, err)
+	if err != nil || err1 != nil {
+		return err1
+	}
+
+	for _, f := range names {
+		filename := Join(path, f.Name())
+		fileInfo, err := c.Stat(filename)
+		if err != nil {
+			err := walkFn(filename, fileInfo, err)
+			if err != nil && err != filepath.SkipDir {
+				return err
+			}
+		} else {
+			err = c.walkDav(filename, fileInfo, walkFn)
+			if err != nil {
+				if !fileInfo.IsDir() || err != filepath.SkipDir {
+					return err
+				}
+			}
+		}
+	}
+
+	return nil
 }

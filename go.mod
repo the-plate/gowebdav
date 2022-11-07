@@ -1,3 +1,3 @@
-module github.com/studio-b12/gowebdav
+module github.com/the-plate/gowebdav
 
-go 1.17
+go 1.18
