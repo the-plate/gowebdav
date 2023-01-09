@@ -288,33 +288,26 @@ func (c *Client) Mkdir(path string, _ os.FileMode) (err error) {
 // MkdirAll like mkdir -p, but for webdav
 func (c *Client) MkdirAll(path string, _ os.FileMode) (err error) {
 	path = FixSlashes(path)
-	status, err := c.mkcol(path)
-	if err != nil {
-		return
-	}
-	if status == 201 {
-		return nil
-	}
-	if status == 409 {
-		paths := strings.Split(path, "/")
-		sub := "/"
-		for _, e := range paths {
-			if e == "" {
-				continue
-			}
-			sub += e + "/"
-			status, err = c.mkcol(sub)
-			if err != nil {
-				return
-			}
-			if status != 201 {
-				return newPathError("MkdirAll", sub, status)
-			}
+	// TODO: why do we get 500 return code on "status, err := c.mkcol(path)" call from Pantaris. Should be 409
+	paths := strings.Split(path, "/")
+	sub := "/"
+	for _, e := range paths {
+		if e == "" {
+			continue
 		}
-		return nil
-	}
+		sub += e + "/"
+		status, err := c.mkcol(sub)
+		if err != nil {
+			return newPathError("MkdirAll", path, status)
+		}
 
-	return newPathError("MkdirAll", path, status)
+		// 409 is returned in case one or more intermediate collection needs to be created
+		// 409 is also returned in case MKCOL is applied on existing folder
+		if status != 201 && status != 409 {
+			return newPathError("MkdirAll", sub, status)
+		}
+	}
+	return nil
 }
 
 // Rename moves a file from A to B
@@ -476,7 +469,6 @@ func (c *Client) WriteWrCls(_ context.Context, path string, _ os.FileMode) (writ
 
 // ReadAll reads all the subdirectories with it's content. Files are only returned.
 func (c *Client) ReadAll(path string, filesOnly bool, doRec bool) ([]os.FileInfo, error) {
-	path = FixSlashes(path)
 	l := make([]os.FileInfo, 0)
 
 	err := c.WalkDav(path, func(p string, fi os.FileInfo, err error) error {
