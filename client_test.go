@@ -79,7 +79,7 @@ func TestConnect(t *testing.T) {
 }
 
 func TestReadDirConcurrent(t *testing.T) {
-	cli, srv, _, _ := newServer(t)
+	cli, srv, _, ctx := newServer(t)
 	defer srv.Close()
 
 	var wg sync.WaitGroup
@@ -89,7 +89,7 @@ func TestReadDirConcurrent(t *testing.T) {
 
 		go func() {
 			defer wg.Done()
-			f, err := cli.ReadDir("/")
+			f, err := cli.ReadDir(ctx, "/")
 			if err != nil {
 				errs <- errors.New(fmt.Sprintf("got error: %v, want file listing: %v", err, f))
 			}
@@ -116,15 +116,15 @@ func TestReadDirConcurrent(t *testing.T) {
 }
 
 func TestRead(t *testing.T) {
-	cli, srv, _, _ := newServer(t)
+	cli, srv, _, ctx := newServer(t)
 	defer srv.Close()
 
-	data, err := cli.Read("/hello.txt")
+	data, err := cli.Read(ctx, "/hello.txt")
 	if err != nil || bytes.Compare(data, []byte("hello gowebdav\n")) != 0 {
 		t.Fatalf("got: %v, want data: %s", err, []byte("hello gowebdav\n"))
 	}
 
-	data, err = cli.Read("/404.txt")
+	data, err = cli.Read(ctx, "/404.txt")
 	if err == nil {
 		t.Fatalf("got: %v, want error: %v", data, err)
 	}
@@ -134,10 +134,10 @@ func TestRead(t *testing.T) {
 }
 
 func TestReadStream(t *testing.T) {
-	cli, srv, _, _ := newServer(t)
+	cli, srv, _, ctx := newServer(t)
 	defer srv.Close()
 
-	stream, err := cli.ReadStream("/hello.txt")
+	stream, err := cli.ReadStream(ctx, "/hello.txt")
 	if err != nil {
 		t.Fatalf("got: %v, want data: %v", err, stream)
 	}
@@ -147,17 +147,17 @@ func TestReadStream(t *testing.T) {
 		t.Fatalf("got: %v, want stream: hello gowebdav", buf.String())
 	}
 
-	stream, err = cli.ReadStream("/404/hello.txt")
+	stream, err = cli.ReadStream(ctx, "/404/hello.txt")
 	if err == nil {
 		t.Fatalf("got: %v, want error: %v", stream, err)
 	}
 }
 
 func TestReadStreamRange(t *testing.T) {
-	cli, srv, _, _ := newServer(t)
+	cli, srv, _, ctx := newServer(t)
 	defer srv.Close()
 
-	stream, err := cli.ReadStreamRange("/hello.txt", 4, 4)
+	stream, err := cli.ReadStreamRange(ctx, "/hello.txt", 4, 4)
 	if err != nil {
 		t.Fatalf("got: %v, want data: %v", err, stream)
 	}
@@ -167,17 +167,17 @@ func TestReadStreamRange(t *testing.T) {
 		t.Fatalf("got: %v, want stream: o go", buf.String())
 	}
 
-	stream, err = cli.ReadStream("/404/hello.txt")
+	stream, err = cli.ReadStream(ctx, "/404/hello.txt")
 	if err == nil {
 		t.Fatalf("got: %v, want error: %v", stream, err)
 	}
 }
 
 func TestReadStreamRangeUnkownLength(t *testing.T) {
-	cli, srv, _, _ := newServer(t)
+	cli, srv, _, ctx := newServer(t)
 	defer srv.Close()
 
-	stream, err := cli.ReadStreamRange("/hello.txt", 6, 0)
+	stream, err := cli.ReadStreamRange(ctx, "/hello.txt", 6, 0)
 	if err != nil {
 		t.Fatalf("got: %v, want data: %v", err, stream)
 	}
@@ -187,17 +187,17 @@ func TestReadStreamRangeUnkownLength(t *testing.T) {
 		t.Fatalf("got: %v, want stream: gowebdav\n", buf.String())
 	}
 
-	stream, err = cli.ReadStream("/404/hello.txt")
+	stream, err = cli.ReadStream(ctx, "/404/hello.txt")
 	if err == nil {
 		t.Fatalf("got: %v, want error: %v", stream, err)
 	}
 }
 
 func TestStat(t *testing.T) {
-	cli, srv, _, _ := newServer(t)
+	cli, srv, _, ctx := newServer(t)
 	defer srv.Close()
 
-	info, err := cli.Stat("/hello.txt")
+	info, err := cli.Stat(ctx, "/hello.txt")
 	if err != nil {
 		t.Fatalf("got: %v, want os.Info: %v", err, info)
 	}
@@ -205,7 +205,7 @@ func TestStat(t *testing.T) {
 		t.Fatalf("got: %v, want file hello.txt", info)
 	}
 
-	info, err = cli.Stat("/404.txt")
+	info, err = cli.Stat(ctx, "/404.txt")
 	if err == nil {
 		t.Fatalf("got: %v, want error: %v", info, err)
 	}
@@ -218,16 +218,16 @@ func TestMkdir(t *testing.T) {
 	cli, srv, fs, ctx := newServer(t)
 	defer srv.Close()
 
-	info, err := cli.Stat("/newdir")
+	info, err := cli.Stat(ctx, "/newdir")
 	if err == nil {
 		t.Fatalf("got: %v, want error: %v", info, err)
 	}
 
-	if err := cli.Mkdir("/newdir", 0755); err != nil {
+	if err := cli.Mkdir(ctx, "/newdir", 0755); err != nil {
 		t.Fatalf("got: %v, want mkdir /newdir", err)
 	}
 
-	if err := cli.Mkdir("/newdir", 0755); err != nil {
+	if err := cli.Mkdir(ctx, "/newdir", 0755); err != nil {
 		t.Fatalf("got: %v, want mkdir /newdir", err)
 	}
 
@@ -236,7 +236,7 @@ func TestMkdir(t *testing.T) {
 		t.Fatalf("got: %v, want dir info: %v", err, info)
 	}
 
-	if err := cli.Mkdir("/404/newdir", 0755); err == nil {
+	if err := cli.Mkdir(ctx, "/404/newdir", 0755); err == nil {
 		t.Fatalf("expected Mkdir error due to missing parent directory")
 	}
 }
@@ -245,7 +245,7 @@ func TestMkdirAll(t *testing.T) {
 	cli, srv, fs, ctx := newServer(t)
 	defer srv.Close()
 
-	if err := cli.MkdirAll("/dir/dir/dir", 0755); err != nil {
+	if err := cli.MkdirAll(ctx, "/dir/dir/dir", 0755); err != nil {
 		t.Fatalf("got: %v, want mkdirAll /dir/dir/dir", err)
 	}
 
@@ -264,7 +264,7 @@ func TestCopy(t *testing.T) {
 		t.Fatalf("got: %v, want error: %v", info, err)
 	}
 
-	if err := cli.Copy("/hello.txt", "/copy.txt", false); err != nil {
+	if err := cli.Copy(ctx, "/hello.txt", "/copy.txt", false); err != nil {
 		t.Fatalf("got: %v, want copy /hello.txt to /copy.txt", err)
 	}
 
@@ -284,11 +284,11 @@ func TestCopy(t *testing.T) {
 		t.Fatalf("got: %v, want file size: %d bytes", info.Size(), 15)
 	}
 
-	if err := cli.Copy("/hello.txt", "/copy.txt", false); err == nil {
+	if err := cli.Copy(ctx, "/hello.txt", "/copy.txt", false); err == nil {
 		t.Fatalf("expected copy error due to overwrite false")
 	}
 
-	if err := cli.Copy("/hello.txt", "/copy.txt", true); err != nil {
+	if err := cli.Copy(ctx, "/hello.txt", "/copy.txt", true); err != nil {
 		t.Fatalf("got: %v, want overwrite /copy.txt with /hello.txt", err)
 	}
 }
@@ -302,7 +302,7 @@ func TestRename(t *testing.T) {
 		t.Fatalf("got: %v, want error: %v", info, err)
 	}
 
-	if err := cli.Rename("/hello.txt", "/copy.txt", false); err != nil {
+	if err := cli.Rename(ctx, "/hello.txt", "/copy.txt", false); err != nil {
 		t.Fatalf("got: %v, want mv /hello.txt to /copy.txt", err)
 	}
 
@@ -318,7 +318,7 @@ func TestRename(t *testing.T) {
 		t.Fatalf("got: %v, want error: %v", info, err)
 	}
 
-	if err := cli.Rename("/test/test.txt", "/copy.txt", true); err != nil {
+	if err := cli.Rename(ctx, "/test/test.txt", "/copy.txt", true); err != nil {
 		t.Fatalf("got: %v, want overwrite /copy.txt with /hello.txt", err)
 	}
 	info, err = fs.Stat(ctx, "/copy.txt")
@@ -334,7 +334,7 @@ func TestRemove(t *testing.T) {
 	cli, srv, fs, ctx := newServer(t)
 	defer srv.Close()
 
-	if err := cli.Remove("/hello.txt"); err != nil {
+	if err := cli.Remove(ctx, "/hello.txt"); err != nil {
 		t.Fatalf("got: %v, want nil", err)
 	}
 
@@ -342,7 +342,7 @@ func TestRemove(t *testing.T) {
 		t.Fatalf("got: %v, want error: %v", info, err)
 	}
 
-	if err := cli.Remove("/404.txt"); err != nil {
+	if err := cli.Remove(ctx, "/404.txt"); err != nil {
 		t.Fatalf("got: %v, want nil", err)
 	}
 }
@@ -351,7 +351,7 @@ func TestRemoveAll(t *testing.T) {
 	cli, srv, fs, ctx := newServer(t)
 	defer srv.Close()
 
-	if err := cli.RemoveAll("/test/test.txt"); err != nil {
+	if err := cli.RemoveAll(ctx, "/test/test.txt"); err != nil {
 		t.Fatalf("got: %v, want nil", err)
 	}
 
@@ -359,11 +359,11 @@ func TestRemoveAll(t *testing.T) {
 		t.Fatalf("got: %v, want error: %v", info, err)
 	}
 
-	if err := cli.RemoveAll("/404.txt"); err != nil {
+	if err := cli.RemoveAll(ctx, "/404.txt"); err != nil {
 		t.Fatalf("got: %v, want nil", err)
 	}
 
-	if err := cli.RemoveAll("/404/404/404.txt"); err != nil {
+	if err := cli.RemoveAll(ctx, "/404/404/404.txt"); err != nil {
 		t.Fatalf("got: %v, want nil", err)
 	}
 }
@@ -372,7 +372,7 @@ func TestWrite(t *testing.T) {
 	cli, srv, fs, ctx := newServer(t)
 	defer srv.Close()
 
-	if err := cli.Write("/newfile.txt", []byte("foo bar\n"), 0660); err != nil {
+	if err := cli.Write(ctx, "/newfile.txt", []byte("foo bar\n"), 0660); err != nil {
 		t.Fatalf("got: %v, want nil", err)
 	}
 
@@ -384,7 +384,7 @@ func TestWrite(t *testing.T) {
 		t.Fatalf("got: %v, want file size: %d bytes", info.Size(), 8)
 	}
 
-	if err := cli.Write("/404/newfile.txt", []byte("foo bar\n"), 0660); err != nil {
+	if err := cli.Write(ctx, "/404/newfile.txt", []byte("foo bar\n"), 0660); err != nil {
 		t.Fatalf("got: %v, want nil", err)
 	}
 }
@@ -393,7 +393,7 @@ func TestWriteStream(t *testing.T) {
 	cli, srv, fs, ctx := newServer(t)
 	defer srv.Close()
 
-	if err := cli.WriteStream("/newfile.txt", strings.NewReader("foo bar\n"), 0660); err != nil {
+	if err := cli.WriteStream(ctx, "/newfile.txt", strings.NewReader("foo bar\n"), 0660); err != nil {
 		t.Fatalf("got: %v, want nil", err)
 	}
 
@@ -405,7 +405,7 @@ func TestWriteStream(t *testing.T) {
 		t.Fatalf("got: %v, want file size: %d bytes", info.Size(), 8)
 	}
 
-	if err := cli.WriteStream("/404/works.txt", strings.NewReader("foo bar\n"), 0660); err != nil {
+	if err := cli.WriteStream(ctx, "/404/works.txt", strings.NewReader("foo bar\n"), 0660); err != nil {
 		t.Fatalf("got: %v, want nil", err)
 	}
 

@@ -1,3 +1,3 @@
 module github.com/the-plate/gowebdav
 
-go 1.19
+go 1.20
